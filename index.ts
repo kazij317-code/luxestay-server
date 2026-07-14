@@ -226,6 +226,9 @@ async function run() {
         }
 
         const mainImage = image || "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=600&q=80";
+        const imagesList = req.body.images && Array.isArray(req.body.images) && req.body.images.length > 0 
+          ? req.body.images 
+          : [mainImage];
 
         const newStay = {
           title,
@@ -237,7 +240,7 @@ async function run() {
           category,
           date: "Available Now",
           image: mainImage,
-          images: [mainImage],
+          images: imagesList,
           beds: Number(beds || 1),
           guests: Number(guests || 1),
           bathrooms: Number(bathrooms || 1),
