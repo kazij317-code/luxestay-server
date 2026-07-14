@@ -68,8 +68,8 @@ async function run() {
   try {
     await client.connect();
     console.log("Connected to MongoDB successfully!");
-    
-    const db = client.db(dbName);
+
+    const db = client.db("luxestay_db");
     const staysCollection = db.collection("stays");
     const userCollection = db.collection("user");
 
@@ -137,7 +137,7 @@ async function run() {
         const limit = parseInt(req.query.limit) || 8;
 
         let query = {};
-        
+
         if (search) {
           query.$or = [
             { title: { $regex: search, $options: 'i' } },

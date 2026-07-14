@@ -19,6 +19,7 @@
     "mongodb": "^7.3.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "nodemon": "^3.1.14",
+    "tsx": "^4.23.1"
   }
 }
