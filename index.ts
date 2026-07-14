@@ -545,6 +545,57 @@ async function run() {
       }
     });
 
+    // 15. POST /api/inquiries (create private inquiry)
+    app.post("/api/inquiries", async (req, res) => {
+      try {
+        const { stayId, name, email, subject, message } = req.body;
+        if (!name || !email || !subject || !message) {
+          return res.status(400).json({ success: false, error: "All inquiry fields are required" });
+        }
+
+        const inquiriesCollection = db.collection("inquiries");
+        const newInquiry = {
+          stayId,
+          name,
+          email,
+          subject,
+          message,
+          createdAt: new Date()
+        };
+
+        const result = await inquiriesCollection.insertOne(newInquiry);
+        res.status(201).json({ success: true, data: { ...newInquiry, id: result.insertedId.toString() } });
+      } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+      }
+    });
+
+    // 16. GET /api/admin/inquiries (retrieve all inquiries for admin)
+    app.get("/api/admin/inquiries", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const inquiriesCollection = db.collection("inquiries");
+        const inquiries = await inquiriesCollection.find({}).sort({ createdAt: -1 }).toArray();
+        const mapped = [];
+        for (const inq of inquiries) {
+          let propertyTitle = "General Inquiry";
+          if (inq.stayId && ObjectId.isValid(inq.stayId)) {
+            const stay = await staysCollection.findOne({ _id: new ObjectId(inq.stayId) });
+            if (stay) {
+              propertyTitle = stay.title;
+            }
+          }
+          mapped.push({
+            ...inq,
+            id: inq._id.toString(),
+            propertyTitle
+          });
+        }
+        res.status(200).json({ success: true, data: mapped });
+      } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+      }
+    });
+
   } catch (err) {
     console.error(err);
   }
