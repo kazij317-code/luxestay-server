@@ -50,6 +50,14 @@ const verifyToken = async (req, res, next) => {
   try {
     const { payload } = await jwtVerify(token, JWKS);
     req.user = payload;
+
+    // Check if user is blocked
+    const db = client.db(dbName);
+    const dbUser = await db.collection("user").findOne({ email: payload.email });
+    if (dbUser && dbUser.isBlocked) {
+      return res.status(403).json({ success: false, error: "Your account has been blocked by the admin." });
+    }
+
     next();
   } catch (error) {
     console.error("Token verification error:", error);
@@ -370,6 +378,134 @@ async function run() {
         );
 
         res.status(200).json({ success: true, watchlist, isWatchlisted: !isWatchlisted });
+      } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+      }
+    });
+
+    // 8. GET /api/reservations
+    app.get("/api/reservations", verifyToken, async (req, res) => {
+      try {
+        const userId = req.user.id || req.user.userId;
+        const reservationsCollection = db.collection("reservations");
+        const reservations = await reservationsCollection.find({ userId }).toArray();
+        const mappedReservations = [];
+        for (const resv of reservations) {
+          const stay = await staysCollection.findOne({ _id: new ObjectId(resv.stayId) });
+          mappedReservations.push({
+            ...resv,
+            id: resv._id.toString(),
+            propertyTitle: stay ? stay.title : "Luxury Stay",
+            location: stay ? stay.location : "Location",
+            image: stay ? stay.image : ""
+          });
+        }
+        res.status(200).json({ success: true, data: mappedReservations });
+      } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+      }
+    });
+
+    // 9. POST /api/reservations (create)
+    app.post("/api/reservations", verifyToken, async (req, res) => {
+      try {
+        const { stayId, checkIn, checkOut, price, guests } = req.body;
+        const userId = req.user.id || req.user.userId;
+        const userEmail = req.user.email;
+        const userName = req.user.name || "User";
+        const reservationsCollection = db.collection("reservations");
+
+        const newReservation = {
+          stayId,
+          userId,
+          userEmail,
+          userName,
+          checkIn,
+          checkOut,
+          price: Number(price),
+          guests: Number(guests || 1),
+          status: "Confirmed",
+          createdAt: new Date()
+        };
+
+        const result = await reservationsCollection.insertOne(newReservation);
+        res.status(201).json({ success: true, data: { ...newReservation, id: result.insertedId.toString() } });
+      } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+      }
+    });
+
+    // 10. GET /api/admin/users
+    app.get("/api/admin/users", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const users = await userCollection.find({}).toArray();
+        const mappedUsers = users.map(u => ({
+          id: u._id.toString(),
+          name: u.name,
+          email: u.email,
+          image: u.image || "",
+          role: u.role || "user",
+          isBlocked: u.isBlocked || false,
+          createdAt: u.createdAt
+        }));
+        res.status(200).json({ success: true, data: mappedUsers });
+      } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+      }
+    });
+
+    // 11. PATCH /api/admin/users/:id/toggle-block
+    app.patch("/api/admin/users/:id/toggle-block", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const { id } = req.params;
+        const query = ObjectId.isValid(id) ? { _id: new ObjectId(id) } : { _id: id };
+        const user = await userCollection.findOne(query);
+        if (!user) {
+          return res.status(404).json({ success: false, error: "User not found" });
+        }
+        const newBlockState = !user.isBlocked;
+        await userCollection.updateOne(query, { $set: { isBlocked: newBlockState } });
+        res.status(200).json({ success: true, isBlocked: newBlockState });
+      } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+      }
+    });
+
+    // 12. PATCH /api/admin/stays/:id/toggle-featured
+    app.patch("/api/admin/stays/:id/toggle-featured", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const { id } = req.params;
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).json({ success: false, error: "Invalid stay ID" });
+        }
+        const stay = await staysCollection.findOne({ _id: new ObjectId(id) });
+        if (!stay) {
+          return res.status(404).json({ success: false, error: "Stay not found" });
+        }
+        const newFeatured = stay.featured === "Featured" ? "Regular" : "Featured";
+        await staysCollection.updateOne({ _id: new ObjectId(id) }, { $set: { featured: newFeatured } });
+        res.status(200).json({ success: true, featured: newFeatured });
+      } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+      }
+    });
+
+    // 13. GET /api/admin/reservations
+    app.get("/api/admin/reservations", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const reservationsCollection = db.collection("reservations");
+        const reservations = await reservationsCollection.find({}).toArray();
+        const mapped = [];
+        for (const resv of reservations) {
+          const stay = await staysCollection.findOne({ _id: new ObjectId(resv.stayId) });
+          mapped.push({
+            ...resv,
+            id: resv._id.toString(),
+            propertyTitle: stay ? stay.title : "Luxury Stay",
+            location: stay ? stay.location : "Location"
+          });
+        }
+        res.status(200).json({ success: true, data: mapped });
       } catch (err) {
         res.status(500).json({ success: false, error: err.message });
       }
