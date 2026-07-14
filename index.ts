@@ -509,6 +509,38 @@ async function run() {
       } catch (err) {
         res.status(500).json({ success: false, error: err.message });
       }
+    // 14. PATCH /api/user/update
+    app.patch("/api/user/update", verifyToken, async (req, res) => {
+      try {
+        const userId = req.user.id || req.user.userId;
+        const { name, image } = req.body;
+        if (!name) {
+          return res.status(400).json({ success: false, error: "Name is required" });
+        }
+
+        const query = ObjectId.isValid(userId) ? { _id: new ObjectId(userId) } : { _id: userId };
+        const updateData: any = { name };
+        if (image) {
+          updateData.image = image;
+        }
+
+        await userCollection.updateOne(query, { $set: updateData });
+        
+        // Return updated details
+        const updatedUser = await userCollection.findOne(query);
+        res.status(200).json({ 
+          success: true, 
+          user: {
+            id: updatedUser._id.toString(),
+            name: updatedUser.name,
+            email: updatedUser.email,
+            image: updatedUser.image || "",
+            role: updatedUser.role || "user"
+          } 
+        });
+      } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+      }
     });
 
   } catch (err) {
