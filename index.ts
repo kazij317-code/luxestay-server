@@ -509,6 +509,8 @@ async function run() {
       } catch (err) {
         res.status(500).json({ success: false, error: err.message });
       }
+    });
+
     // 14. PATCH /api/user/update
     app.patch("/api/user/update", verifyToken, async (req, res) => {
       try {
