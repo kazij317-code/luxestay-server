@@ -424,7 +424,7 @@ async function run() {
           checkOut,
           price: Number(price),
           guests: Number(guests || 1),
-          status: "Confirmed",
+          status: "Pending",
           createdAt: new Date()
         };
 
@@ -590,6 +590,64 @@ async function run() {
             propertyTitle
           });
         }
+        res.status(200).json({ success: true, data: mapped });
+      } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+      }
+    });
+
+    // 17. PATCH /api/admin/reservations/:id/confirm (confirm reservation)
+    app.patch("/api/admin/reservations/:id/confirm", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const { id } = req.params;
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).json({ success: false, error: "Invalid reservation ID" });
+        }
+        const reservationsCollection = db.collection("reservations");
+        const reservation = await reservationsCollection.findOne({ _id: new ObjectId(id) });
+        if (!reservation) {
+          return res.status(404).json({ success: false, error: "Reservation not found" });
+        }
+        await reservationsCollection.updateOne({ _id: new ObjectId(id) }, { $set: { status: "Confirmed" } });
+        res.status(200).json({ success: true, status: "Confirmed" });
+      } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+      }
+    });
+
+    // 18. POST /api/newsletter/subscribe (newsletter signup)
+    app.post("/api/newsletter/subscribe", async (req, res) => {
+      try {
+        const { email } = req.body;
+        if (!email) {
+          return res.status(400).json({ success: false, error: "Email is required" });
+        }
+        const subscriptionsCollection = db.collection("subscriptions");
+        const existing = await subscriptionsCollection.findOne({ email });
+        if (existing) {
+          return res.status(200).json({ success: true, message: "Already subscribed" });
+        }
+        const newSub = {
+          email,
+          createdAt: new Date()
+        };
+        await subscriptionsCollection.insertOne(newSub);
+        res.status(201).json({ success: true, data: newSub });
+      } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+      }
+    });
+
+    // 19. GET /api/admin/subscriptions (retrieve subscribers for admin)
+    app.get("/api/admin/subscriptions", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const subscriptionsCollection = db.collection("subscriptions");
+        const subscribers = await subscriptionsCollection.find({}).sort({ createdAt: -1 }).toArray();
+        const mapped = subscribers.map(s => ({
+          id: s._id.toString(),
+          email: s.email,
+          createdAt: s.createdAt
+        }));
         res.status(200).json({ success: true, data: mapped });
       } catch (err) {
         res.status(500).json({ success: false, error: err.message });
